@@ -4,22 +4,6 @@ var urlformat = require('url').format;
 var exec = require('child_process').exec;
 
 var processName = 'iexplore.exe';
-
-function getInternetExplorerExe() {
-  var suffix = '\\Internet Explorer\\' + processName,
-    prefixes = [process.env['' + 'PROGRAMW6432'], // '' + ' trick to keep jscs happy
-                process.env['' + 'PROGRAMFILES(X86)'],
-                process.env['' + 'PROGRAMFILES']],
-    prefix, i;
-
-  for (i = 0; i < prefixes.length; i++) {
-    prefix = prefixes[i];
-    if (prefix && fs.existsSync(prefix + suffix)) {
-      return prefix + suffix;
-    }
-  }
-}
-
 var IEBrowser = function(baseBrowserDecorator, logger, args) {
   baseBrowserDecorator(this);
 
@@ -55,14 +39,12 @@ var IEBrowser = function(baseBrowserDecorator, logger, args) {
   // This function kills any iexplore.exe process who's command line args match 'SCODEF:pid'.
   // On IE11 this will kill the extra process. On older versions, no process will be found.
   function killExtraIEProcess(pid, cb) {
-
     var scodef = 'SCODEF:' + pid;
 
     //wmic.exe : http://msdn.microsoft.com/en-us/library/aa394531(v=vs.85).aspx
     var wmic = 'wmic.exe Path win32_Process ' +
                'where "Name=\'' + processName + '\' and ' +
                'CommandLine Like \'%' + scodef + '%\'" call Terminate';
-
     exec(wmic, function(err) {
       if (err) {
         log.error('Killing extra IE process failed. ' + err);
@@ -76,31 +58,42 @@ var IEBrowser = function(baseBrowserDecorator, logger, args) {
 
   this._getOptions = function(url) {
     var urlObj = urlparse(url, true);
-
+    var options = ['-extoff'];
+      if (args.extOn) {
+          options = [];
+      }
     handleXUaCompatible(args, urlObj);
 
     delete urlObj.search; //url.format does not want search attribute
     url = urlformat(urlObj);
 
-    return [
-      '-extoff'
-    ].concat(flags, [url]);
+    return options.concat(flags, [url]);
   };
 
   var baseOnProcessExit = this._onProcessExit;
   this._onProcessExit = function(code, errorOutput) {
     var pid = this._process.pid;
     killExtraIEProcess(pid, function() {
-      if (baseOnProcessExit) {
-        baseOnProcessExit(code, errorOutput);
-      }
+      baseOnProcessExit(code, errorOutput);
     });
   };
 
-  // this is to expose the function for unit testing
-  this._getInternetExplorerExe = getInternetExplorerExe;
 };
 
+function getInternetExplorerExe() {
+  var suffix = '\\Internet Explorer\\' + processName,
+    prefixes = [process.env['' + 'PROGRAMW6432'], // '' + ' trick to keep jscs happy
+                process.env['' + 'PROGRAMFILES(X86)'],
+                process.env['' + 'PROGRAMFILES']],
+    prefix, i;
+
+  for (i = 0; i < prefixes.length; i++) {
+    prefix = prefixes[i];
+    if (prefix && fs.existsSync(prefix + suffix)) {
+      return prefix + suffix;
+    }
+  }
+}
 IEBrowser.prototype = {
   name: 'IE',
   DEFAULT_CMD: {
